@@ -1,0 +1,201 @@
+---
+title: "Reproducible Research: Peer Assessment 1 - Activity Data"
+author: "Edzai C. Zvobwo"
+date: "February 11, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
+
+The variables included in this dataset are:
+
+1. **steps:** Number of steps taking in a 5-minute interval (missing values are coded as NA)
+2. **date:** The date on which the measurement was taken in YYYY-MM-DD format
+3. **interval:** Identifier for the 5-minute interval in which measurement was taken
+
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset.
+
+The first thing to do is to read the csv file containg the data into RStudio. 
+
+```{r echo=TRUE}
+act_data <- read.csv ("activity.csv", header = T, sep = ",", stringsAsFactors = F)
+```
+
+Quickly inspecting the data by checking:
+
+1. structure of the data 
+```{r echo=TRUE}
+str(act_data)
+```
+
+2. dimensions of the data
+```{r echo=TRUE}
+```
+
+3. the first 5 rows.
+
+```{r echo=TRUE}
+head(act_data, 5)
+```
+
+4. the last 5 rows
+
+```{r echo=TRUE}
+tail(act_data,5)
+```
+
+We need to change the date format as follows
+
+```{r echo=TRUE}
+act_data$date <- as.Date(act_data$date, "%Y-%m-%d")
+```
+
+## Data Analysis
+
+### 1. What is the mean total number of steps taken per day?
+
+```{r echo=TRUE}
+library (dplyr)
+mean_steps <- act_data %>% group_by(date) %>%
+          summarize(total.steps = sum(steps, na.rm = T), 
+                  mean.steps = mean(steps, na.rm = T))
+```
+
+Now we can plot the histogram as below.
+
+```{r echo=TRUE}
+library(ggplot2)
+m <- ggplot(mean_steps, aes(x=total.steps))
+m + geom_histogram(binwidth = 2500) + theme(axis.text = element_text(size = 13),  
+      axis.title = element_text(size = 14)) + labs(y = "Number of Occurrencies") + labs(x = "Total steps/day")
+```
+
+From the histogram we can see that there is slightly negative skew in the distribution of the data, with an abnormally high frequency in the first bar of the histogram.
+
+Now we can determine the exact value of the 5 number summary of the data as follows:
+```{r echo=TRUE}
+summary(mean_steps$mean.steps)
+```
+
+There are 8 missing values in the data as represented by the NAs.
+
+### 2. What is the daily activity pattern?
+
+The data will be grouped into 5 minute intervals afterwhich their respective means will be calculated as illustrated below.
+
+```{r echo=TRUE}
+mean_int <- act_data %>% group_by(interval) %>%
+      summarize(mean.steps = mean(steps, na.rm = T))
+n <- ggplot(mean_int, aes(x = interval, y = mean.steps))
+n + geom_line() + theme(axis.text = element_text(size = 12), 
+      axis.title = element_text(size = 14, face = "bold")) + 
+      labs(y = "Mean number of steps") + labs(x = "Interval")
+```
+
+The number of steps peaked between interval 500 and 1000.
+
+### 3. Imputing missing values
+
+```{r echo=TRUE}
+mean(is.na(act_data$steps))
+
+```
+ Approximately 13% of the data is missing as shown above.
+ 
+```{r echo=TRUE}
+sum(is.na(act_data$steps))
+```
+
+Lets check for missing values in the interval column within mean_int, where we stored the mean number of steps for each 5 min interval:
+```{r echo=TRUE}
+sum(is.na(mean_int$mean.steps))
+
+```
+
+Now let us duplicate the data as follows:
+```{r echo=TRUE}
+new_act_data <- act_data
+
+```
+In order to fill in missing values we check at each row if the column interval is NA, when the condition is true we look for the corresponding interval (index), we search for this particular interval in the mean_int data and extract it to a temporary variable values. Last we choose only the column of interest from values, which is the mean.steps and assign this number to the corresponding position in the new_act_data set. We use a for loop to run through all the rows. 
+
+```{r echo=TRUE}
+for (i in 1:nrow(new_act_data)) {
+      if (is.na(new_act_data$steps[i])) {
+            index <- new_act_data$interval[i]
+            value <- subset(mean_int, interval==index)
+            new_act_data$steps[i] <- value$mean.steps
+      }
+}
+tail(new_act_data)
+
+```
+
+Grouping the data by date we can construct the histogram.
+```{r echo=TRUE}
+new_mean <- new_act_data %>% group_by(date) %>%
+      summarize(total.steps = sum(steps, na.rm = T))
+```
+
+```{r echo=TRUE}
+g <- ggplot(new_mean, aes(x=total.steps))
+g + geom_histogram(binwidth = 2500) + theme(axis.text = element_text(size = 12),
+      axis.title = element_text(size = 14)) + labs(y = "Frequency") + labs(x = "Total steps/day")
+```
+
+The abnormal bar that was on the left has been removed and now the data exhibits a negatively skewed distribution around the mean.
+
+### 4. Are there differences in activity patterns between weekdays and weekends?
+
+We need to explore and ascertain if there is a statistically significant difference in the activity patterns bewtween weekdays and weekends.
+
+```{r echo=TRUE}
+new_act_data$day <- ifelse(weekdays(new_act_data$date) %in% c("Saturday", "Sunday"), "weekend", "weekday")
+
+```
+
+Next we create two subsets, one containing the weekend and one containing the weekday data:
+
+```{r echo=TRUE}
+wend <- filter(new_act_data, day == "weekend")
+wday <- filter(new_act_data, day == "weekday")
+```
+
+Since the day column is lots during the grouping, we add it again to the wend and wday dataframes. Lastly, we merge both data sets into one named new_int
+
+```{r echo=TRUE}
+wend <- wend %>%
+      group_by(interval) %>%
+      summarize(mean.steps = mean(steps)) 
+wend$day <- "weekend"
+
+wday <- wday %>%
+      group_by(interval) %>%
+      summarize(mean.steps = mean(steps)) 
+wday$day <- "weekday"
+
+new_int <- rbind(wend, wday)
+new_int$day <- as.factor(new_int$day)
+new_int$day <- relevel(new_int$day, "weekend")
+```
+
+The two panel plot is now created, using the day column as a factor to spearate the weekday from the weekend timeseries.
+
+```{r echo=TRUE}
+g <- ggplot (new_int, aes (interval, mean.steps))
+g + geom_line() + facet_grid (day~.) + theme(axis.text = element_text(size = 12), 
+      axis.title = element_text(size = 14)) + labs(y = "Number of Steps") + labs(x = "Interval")
+```
+
+There is a marked difference between weekday and weekend activity with the weeekend showing more activity. There variance during the weelends is lower than during weekdays.
+ 
+ 
+
